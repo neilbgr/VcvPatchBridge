@@ -9,3 +9,5 @@ C# solution targeting **.NET 10**. All code, comments, console/UI output, commit
 
 ## Development workflow
 Use unit tests (xUnit, `tests/VcvPatchBridge.Tests`) to drive development: write/update a test for new behavior or a bug before or alongside the fix, then run `dotnet test`. Don't consider a change done until the test suite passes.
+
+Follow `.editorconfig`. Run `dotnet format` before considering a change done (fixes encoding/line-endings/indentation and naming). Note: `dotnet format` does **not** catch the `:silent`-severity rules (no `var` — always use explicit types; prefer expression-bodied members when the body is a single statement) — these must be respected manually when writing code.

@@ -1,4 +1,4 @@
-namespace VcvPatchBridge;
+﻿namespace VcvPatchBridge;
 
 /// <summary>Derives an output patch path from the input path and the conversion target when none was given explicitly.</summary>
 public static class OutputPathResolver
@@ -18,13 +18,17 @@ public static class OutputPathResolver
 
         string candidate = Path.Combine(dir, $"{baseName}.{slug}{ext}");
         if (force || !File.Exists(candidate))
+        {
             return candidate;
+        }
 
         for (int n = 1; ; n++)
         {
             string numbered = Path.Combine(dir, $"{baseName}.{slug}.x{n}{ext}");
             if (!File.Exists(numbered))
+            {
                 return numbered;
+            }
         }
     }
 }

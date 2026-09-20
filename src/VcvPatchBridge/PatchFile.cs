@@ -1,4 +1,4 @@
-using System.Formats.Tar;
+﻿using System.Formats.Tar;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -15,7 +15,7 @@ namespace VcvPatchBridge;
 /// </summary>
 public sealed class PatchFile
 {
-    private static readonly byte[] ZstdMagic = { 0x28, 0xB5, 0x2F, 0xFD };
+    private static readonly byte[] zstdMagic = { 0x28, 0xB5, 0x2F, 0xFD };
 
     public JsonObject Root { get; }
 
@@ -34,42 +34,50 @@ public sealed class PatchFile
     public static PatchFile Load(string path)
     {
         byte[] bytes = File.ReadAllBytes(path);
-        bool isArchive = bytes.Length >= 4 && bytes.AsSpan(0, 4).SequenceEqual(ZstdMagic);
+        bool isArchive = bytes.Length >= 4 && bytes.AsSpan(0, 4).SequenceEqual(zstdMagic);
 
         if (!isArchive)
         {
-            var root = ParseJson(bytes, path);
+            JsonObject root = ParseJson(bytes, path);
             return new PatchFile(root, new List<(string, byte[])>(), wasArchive: false);
         }
 
-        using var compressedStream = new MemoryStream(bytes);
-        using var tarStream = new DecompressionStream(compressedStream);
-        using var tarCopy = new MemoryStream();
+        using MemoryStream compressedStream = new MemoryStream(bytes);
+        using DecompressionStream tarStream = new DecompressionStream(compressedStream);
+        using MemoryStream tarCopy = new MemoryStream();
         tarStream.CopyTo(tarCopy);
         tarCopy.Position = 0;
 
         JsonObject? patchJson = null;
-        var extras = new List<(string Name, byte[] Data)>();
+        List<(string Name, byte[] Data)> extras = new List<(string Name, byte[] Data)>();
 
-        using var tarReader = new TarReader(tarCopy);
+        using TarReader tarReader = new TarReader(tarCopy);
         TarEntry? entry;
         while ((entry = tarReader.GetNextEntry()) is not null)
         {
             if (entry.DataStream is null)
+            {
                 continue;
+            }
 
-            using var entryData = new MemoryStream();
+            using MemoryStream entryData = new MemoryStream();
             entry.DataStream.CopyTo(entryData);
             byte[] data = entryData.ToArray();
 
             if (NormalizeEntryName(entry.Name) == "patch.json")
+            {
                 patchJson = ParseJson(data, path);
+            }
             else
+            {
                 extras.Add((entry.Name, data));
+            }
         }
 
         if (patchJson is null)
+        {
             throw new InvalidDataException($"'{path}' is a tar+zstd archive but contains no patch.json entry.");
+        }
 
         return new PatchFile(patchJson, extras, wasArchive: true);
     }
@@ -78,7 +86,9 @@ public sealed class PatchFile
     private static string NormalizeEntryName(string name)
     {
         while (name.StartsWith("./", StringComparison.Ordinal))
+        {
             name = name[2..];
+        }
         return name;
     }
 
@@ -95,18 +105,18 @@ public sealed class PatchFile
     {
         byte[] patchJsonBytes = Encoding.UTF8.GetBytes(Root.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
 
-        using var tarBuffer = new MemoryStream();
-        using (var tarWriter = new TarWriter(tarBuffer, TarEntryFormat.Pax, leaveOpen: true))
+        using MemoryStream tarBuffer = new MemoryStream();
+        using (TarWriter tarWriter = new TarWriter(tarBuffer, TarEntryFormat.Pax, leaveOpen: true))
         {
-            var patchEntry = new PaxTarEntry(TarEntryType.RegularFile, "patch.json")
+            PaxTarEntry patchEntry = new PaxTarEntry(TarEntryType.RegularFile, "patch.json")
             {
                 DataStream = new MemoryStream(patchJsonBytes),
             };
             tarWriter.WriteEntry(patchEntry);
 
-            foreach (var (name, data) in ExtraEntries)
+            foreach ((string name, byte[] data) in ExtraEntries)
             {
-                var extraEntry = new PaxTarEntry(TarEntryType.RegularFile, name)
+                PaxTarEntry extraEntry = new PaxTarEntry(TarEntryType.RegularFile, name)
                 {
                     DataStream = new MemoryStream(data),
                 };
@@ -117,8 +127,8 @@ public sealed class PatchFile
         tarBuffer.Position = 0;
 
         Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
-        using var outFile = File.Create(path);
-        using var compressionStream = new CompressionStream(outFile, level: 19);
+        using FileStream outFile = File.Create(path);
+        using CompressionStream compressionStream = new CompressionStream(outFile, level: 19);
         tarBuffer.CopyTo(compressionStream);
     }
 }

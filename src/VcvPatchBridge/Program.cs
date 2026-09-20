@@ -1,4 +1,4 @@
-using VcvPatchBridge;
+﻿using VcvPatchBridge;
 
 int exitCode = Run(args);
 return exitCode;
@@ -49,15 +49,19 @@ static int RunDetect(string[] args)
     if (detection.CardinalOnlyModules.Count > 0)
     {
         Console.WriteLine($"Cardinal modules found ({detection.CardinalOnlyModules.Count}):");
-        foreach (var m in detection.CardinalOnlyModules.Select(s => s.Model).Distinct().OrderBy(s => s))
+        foreach (string m in detection.CardinalOnlyModules.Select(s => s.Model).Distinct().OrderBy(s => s))
+        {
             Console.WriteLine($"  - {m}");
+        }
     }
 
     if (detection.RackOnlyModules.Count > 0)
     {
         Console.WriteLine($"VCV Rack (Core, never resaved by Cardinal) modules found ({detection.RackOnlyModules.Count}):");
-        foreach (var m in detection.RackOnlyModules.Select(s => s.Model).Distinct().OrderBy(s => s))
+        foreach (string m in detection.RackOnlyModules.Select(s => s.Model).Distinct().OrderBy(s => s))
+        {
             Console.WriteLine($"  - {m}");
+        }
     }
 
     return 0;
@@ -145,8 +149,10 @@ static int RunConvert(string[] args)
     {
         Console.WriteLine();
         Console.WriteLine($"Warnings ({result.Warnings.Count}):");
-        foreach (var w in result.Warnings)
+        foreach (string w in result.Warnings)
+        {
             Console.WriteLine($"  - {w}");
+        }
     }
 
     return 0;
@@ -160,13 +166,10 @@ static string Describe(PatchOrigin origin) => origin switch
     _ => origin.ToString(),
 };
 
-static void PrintUsage()
-{
-    Console.WriteLine("""
-        VcvPatchBridge - detects/converts a .vcv patch between VCV Rack and Cardinal
+static void PrintUsage() => Console.WriteLine("""
+    VcvPatchBridge - detects/converts a .vcv patch between VCV Rack and Cardinal
 
-        Usage:
-          vcvpatchbridge detect <patch.vcv>
-          vcvpatchbridge convert <input.vcv> [output.vcv] [--to cardinal|rack] [--force]
-        """);
-}
+    Usage:
+      vcvpatchbridge detect <patch.vcv>
+      vcvpatchbridge convert <input.vcv> [output.vcv] [--to cardinal|rack] [--force]
+    """);

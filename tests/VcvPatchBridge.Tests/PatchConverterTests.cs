@@ -1,4 +1,4 @@
-using System.Text.Json.Nodes;
+﻿using System.Text.Json.Nodes;
 using VcvPatchBridge;
 
 namespace VcvPatchBridge.Tests;
@@ -8,15 +8,15 @@ public class PatchConverterTests
     [Fact]
     public void Simple_rename_Cardinal_to_Rack()
     {
-        var root = TestPatchBuilder.Root(new[]
+        JsonObject root = TestPatchBuilder.Root(new[]
         {
             TestPatchBuilder.Module(1, "Cardinal", "HostAudio8"),
         });
-        var patch = TestPatchBuilder.ToPatchFile(root);
+        PatchFile patch = TestPatchBuilder.ToPatchFile(root);
 
         PatchConverter.Convert(patch, PatchOrigin.Rack);
 
-        var module = (JsonObject)patch.Root["modules"]![0]!;
+        JsonObject module = (JsonObject)patch.Root["modules"]![0]!;
         Assert.Equal("Core", module["plugin"]!.GetValue<string>());
         Assert.Equal("AudioInterface", module["model"]!.GetValue<string>());
     }
@@ -24,15 +24,15 @@ public class PatchConverterTests
     [Fact]
     public void Simple_rename_Rack_to_Cardinal()
     {
-        var root = TestPatchBuilder.Root(new[]
+        JsonObject root = TestPatchBuilder.Root(new[]
         {
             TestPatchBuilder.Module(1, "Core", "AudioInterface2"),
         });
-        var patch = TestPatchBuilder.ToPatchFile(root);
+        PatchFile patch = TestPatchBuilder.ToPatchFile(root);
 
         PatchConverter.Convert(patch, PatchOrigin.Cardinal);
 
-        var module = (JsonObject)patch.Root["modules"]![0]!;
+        JsonObject module = (JsonObject)patch.Root["modules"]![0]!;
         Assert.Equal("Cardinal", module["plugin"]!.GetValue<string>());
         Assert.Equal("HostAudio2", module["model"]!.GetValue<string>());
     }
@@ -44,7 +44,7 @@ public class PatchConverterTests
         const long downstreamId = 200; // fed by HostMIDI's Gate output
         const long upstreamId = 300;   // feeds HostMIDI's Pitch input
 
-        var root = TestPatchBuilder.Root(
+        JsonObject root = TestPatchBuilder.Root(
             modules: new[]
             {
                 TestPatchBuilder.Module(hostMidiId, "Cardinal", "HostMIDI"),
@@ -58,27 +58,27 @@ public class PatchConverterTests
                 // LFO output 0 -> HostMIDI PITCH_INPUT (index 0)
                 TestPatchBuilder.Cable(2, upstreamId, 0, hostMidiId, 0),
             });
-        var patch = TestPatchBuilder.ToPatchFile(root);
+        PatchFile patch = TestPatchBuilder.ToPatchFile(root);
 
-        var result = PatchConverter.Convert(patch, PatchOrigin.Rack);
+        ConversionResult result = PatchConverter.Convert(patch, PatchOrigin.Rack);
 
-        var modules = patch.Root["modules"]!.AsArray().Cast<JsonObject>().ToList();
-        var midiToCv = modules.Single(m => m["model"]!.GetValue<string>() == "MIDIToCVInterface");
-        var cvToMidi = modules.Single(m => m["model"]!.GetValue<string>() == "CV-MIDI");
+        List<JsonObject> modules = patch.Root["modules"]!.AsArray().Cast<JsonObject>().ToList();
+        JsonObject midiToCv = modules.Single(m => m["model"]!.GetValue<string>() == "MIDIToCVInterface");
+        JsonObject cvToMidi = modules.Single(m => m["model"]!.GetValue<string>() == "CV-MIDI");
         Assert.Equal("Core", midiToCv["plugin"]!.GetValue<string>());
         Assert.Equal("Core", cvToMidi["plugin"]!.GetValue<string>());
 
         long midiToCvId = midiToCv["id"]!.GetValue<long>();
         long cvToMidiId = cvToMidi["id"]!.GetValue<long>();
 
-        var cables = patch.Root["cables"]!.AsArray().Cast<JsonObject>().ToList();
+        List<JsonObject> cables = patch.Root["cables"]!.AsArray().Cast<JsonObject>().ToList();
         Assert.Equal(2, cables.Count);
 
-        var gateCable = cables.Single(c => c["inputModuleId"]!.GetValue<long>() == downstreamId);
+        JsonObject gateCable = cables.Single(c => c["inputModuleId"]!.GetValue<long>() == downstreamId);
         Assert.Equal(midiToCvId, gateCable["outputModuleId"]!.GetValue<long>());
         Assert.Equal(1, gateCable["outputId"]!.GetValue<int>());
 
-        var pitchCable = cables.Single(c => c["outputModuleId"]!.GetValue<long>() == upstreamId);
+        JsonObject pitchCable = cables.Single(c => c["outputModuleId"]!.GetValue<long>() == upstreamId);
         Assert.Equal(cvToMidiId, pitchCable["inputModuleId"]!.GetValue<long>());
         Assert.Equal(0, pitchCable["inputId"]!.GetValue<int>());
 
@@ -91,7 +91,7 @@ public class PatchConverterTests
         const long hostMidiCcId = 1;
         const long otherId = 2;
 
-        var root = TestPatchBuilder.Root(
+        JsonObject root = TestPatchBuilder.Root(
             modules: new[]
             {
                 TestPatchBuilder.Module(hostMidiCcId, "Cardinal", "HostMIDICC"),
@@ -102,9 +102,9 @@ public class PatchConverterTests
                 // output index 17 == CC_OUTPUT_PITCHBEND (16 CC cells [0-15] + ch.pressure[16] + pitchbend[17])
                 TestPatchBuilder.Cable(1, hostMidiCcId, 17, otherId, 0),
             });
-        var patch = TestPatchBuilder.ToPatchFile(root);
+        PatchFile patch = TestPatchBuilder.ToPatchFile(root);
 
-        var result = PatchConverter.Convert(patch, PatchOrigin.Rack);
+        ConversionResult result = PatchConverter.Convert(patch, PatchOrigin.Rack);
 
         Assert.Empty(patch.Root["cables"]!.AsArray());
         Assert.Contains(result.Warnings, w => w.Contains("Pitchbend"));
@@ -113,15 +113,15 @@ public class PatchConverterTests
     [Fact]
     public void No_equivalent_module_is_left_untouched_and_warns()
     {
-        var root = TestPatchBuilder.Root(new[]
+        JsonObject root = TestPatchBuilder.Root(new[]
         {
             TestPatchBuilder.Module(1, "Cardinal", "HostTime"),
         });
-        var patch = TestPatchBuilder.ToPatchFile(root);
+        PatchFile patch = TestPatchBuilder.ToPatchFile(root);
 
-        var result = PatchConverter.Convert(patch, PatchOrigin.Rack);
+        ConversionResult result = PatchConverter.Convert(patch, PatchOrigin.Rack);
 
-        var module = (JsonObject)patch.Root["modules"]![0]!;
+        JsonObject module = (JsonObject)patch.Root["modules"]![0]!;
         Assert.Equal("Cardinal", module["plugin"]!.GetValue<string>());
         Assert.Equal("HostTime", module["model"]!.GetValue<string>());
         Assert.Single(result.Warnings);
@@ -134,16 +134,16 @@ public class PatchConverterTests
         // 6 HP more than before. Anything touching its right edge must be pushed right by that much,
         // or it ends up overlapping (and Rack's own de-overlap on load scrambles unrelated modules,
         // e.g. tearing a MindMeld mixer away from its expander).
-        var hostMidiCc = TestPatchBuilder.Module(1, "Cardinal", "HostMIDICC");
+        JsonObject hostMidiCc = TestPatchBuilder.Module(1, "Cardinal", "HostMIDICC");
         hostMidiCc["pos"] = new JsonArray { 44, 0 };
 
-        var touchingNeighbour = TestPatchBuilder.Module(2, "MindMeldModular", "MixMasterJr");
+        JsonObject touchingNeighbour = TestPatchBuilder.Module(2, "MindMeldModular", "MixMasterJr");
         touchingNeighbour["pos"] = new JsonArray { 58, 0 }; // touches HostMIDICC's right edge (44+14)
 
-        var otherRowModule = TestPatchBuilder.Module(3, "MindMeldModular", "MixMasterJr");
+        JsonObject otherRowModule = TestPatchBuilder.Module(3, "MindMeldModular", "MixMasterJr");
         otherRowModule["pos"] = new JsonArray { 58, 1 }; // same x, different row: must NOT move
 
-        var root = TestPatchBuilder.Root(
+        JsonObject root = TestPatchBuilder.Root(
             modules: new[] { hostMidiCc, touchingNeighbour, otherRowModule },
             // Both halves must be cabled, or the unused one would be dropped (see the dedicated test for that).
             cables: new[]
@@ -151,15 +151,15 @@ public class PatchConverterTests
                 TestPatchBuilder.Cable(1, 1, 0, 2, 0),
                 TestPatchBuilder.Cable(2, 3, 0, 1, 0),
             });
-        var patch = TestPatchBuilder.ToPatchFile(root);
+        PatchFile patch = TestPatchBuilder.ToPatchFile(root);
 
         PatchConverter.Convert(patch, PatchOrigin.Rack);
 
-        var modules = patch.Root["modules"]!.AsArray().Cast<JsonObject>().ToList();
-        var midiCcToCv = modules.Single(m => m["model"]!.GetValue<string>() == "MIDICCToCVInterface");
-        var cvToMidiCc = modules.Single(m => m["model"]!.GetValue<string>() == "CV-CC");
-        var neighbour = modules.Single(m => m["id"]!.GetValue<long>() == 2);
-        var otherRow = modules.Single(m => m["id"]!.GetValue<long>() == 3);
+        List<JsonObject> modules = patch.Root["modules"]!.AsArray().Cast<JsonObject>().ToList();
+        JsonObject midiCcToCv = modules.Single(m => m["model"]!.GetValue<string>() == "MIDICCToCVInterface");
+        JsonObject cvToMidiCc = modules.Single(m => m["model"]!.GetValue<string>() == "CV-CC");
+        JsonObject neighbour = modules.Single(m => m["id"]!.GetValue<long>() == 2);
+        JsonObject otherRow = modules.Single(m => m["id"]!.GetValue<long>() == 3);
 
         double InX(JsonObject m) => m["pos"]![0]!.GetValue<double>();
 
@@ -172,24 +172,24 @@ public class PatchConverterTests
     [Fact]
     public void Split_drops_the_unused_half_and_does_not_reserve_space_for_it()
     {
-        var hostMidi = TestPatchBuilder.Module(1, "Cardinal", "HostMIDI");
+        JsonObject hostMidi = TestPatchBuilder.Module(1, "Cardinal", "HostMIDI");
         hostMidi["pos"] = new JsonArray { 0, 0 };
-        var sink = TestPatchBuilder.Module(2, "Fundamental", "VCA");
+        JsonObject sink = TestPatchBuilder.Module(2, "Fundamental", "VCA");
         sink["pos"] = new JsonArray { 9, 0 }; // touches HostMIDI's right edge (0 + 9 HP)
 
-        var root = TestPatchBuilder.Root(
+        JsonObject root = TestPatchBuilder.Root(
             modules: new[] { hostMidi, sink },
             // Only the input side (Pitch, index 0) is actually cabled; nothing feeds HostMIDI's
             // MIDI-out inputs, so CV-MIDI would just sit there disconnected.
             cables: new[] { TestPatchBuilder.Cable(1, hostMidi["id"]!.GetValue<long>(), 0, sink["id"]!.GetValue<long>(), 0) });
-        var patch = TestPatchBuilder.ToPatchFile(root);
+        PatchFile patch = TestPatchBuilder.ToPatchFile(root);
 
         PatchConverter.Convert(patch, PatchOrigin.Rack);
 
-        var modules = patch.Root["modules"]!.AsArray().Cast<JsonObject>().ToList();
+        List<JsonObject> modules = patch.Root["modules"]!.AsArray().Cast<JsonObject>().ToList();
         Assert.DoesNotContain(modules, m => m["model"]?.GetValue<string>() == "CV-MIDI");
-        var midiToCv = modules.Single(m => m["model"]!.GetValue<string>() == "MIDIToCVInterface");
-        var sinkAfter = modules.Single(m => m["id"]!.GetValue<long>() == 2);
+        JsonObject midiToCv = modules.Single(m => m["model"]!.GetValue<string>() == "MIDIToCVInterface");
+        JsonObject sinkAfter = modules.Single(m => m["id"]!.GetValue<long>() == 2);
 
         Assert.Equal(0, midiToCv["pos"]![0]!.GetValue<double>());
         // MIDIToCVInterface alone is 8 HP (< HostMIDI's 9 HP), so the row shrinks: the sink moves left.
@@ -199,7 +199,7 @@ public class PatchConverterTests
     [Fact]
     public void Split_carries_over_MIDI_channel_CC_numbers_and_gate_notes()
     {
-        var hostMidiCc = TestPatchBuilder.Module(1, "Cardinal", "HostMIDICC");
+        JsonObject hostMidiCc = TestPatchBuilder.Module(1, "Cardinal", "HostMIDICC");
         hostMidiCc["data"] = new JsonObject
         {
             ["ccs"] = new JsonArray { 10, 20, 30 },
@@ -207,10 +207,10 @@ public class PatchConverterTests
             ["inputChannel"] = 5,  // 1-based, "5" in the Cardinal UI
             ["outputChannel"] = 3, // 0-based, "channel 4" in the Cardinal UI
         };
-        var sinkCc = TestPatchBuilder.Module(2, "Fundamental", "VCA");
-        var sourceCc = TestPatchBuilder.Module(3, "Fundamental", "LFO");
+        JsonObject sinkCc = TestPatchBuilder.Module(2, "Fundamental", "VCA");
+        JsonObject sourceCc = TestPatchBuilder.Module(3, "Fundamental", "LFO");
 
-        var hostMidiGate = TestPatchBuilder.Module(4, "Cardinal", "HostMIDIGate");
+        JsonObject hostMidiGate = TestPatchBuilder.Module(4, "Cardinal", "HostMIDIGate");
         hostMidiGate["pos"] = new JsonArray { 20, 0 };
         hostMidiGate["data"] = new JsonObject
         {
@@ -219,10 +219,10 @@ public class PatchConverterTests
             ["inputChannel"] = 0, // "All" in the Cardinal UI
             ["outputChannel"] = 0,
         };
-        var sinkGate = TestPatchBuilder.Module(5, "Fundamental", "VCA");
-        var sourceGate = TestPatchBuilder.Module(6, "Fundamental", "LFO");
+        JsonObject sinkGate = TestPatchBuilder.Module(5, "Fundamental", "VCA");
+        JsonObject sourceGate = TestPatchBuilder.Module(6, "Fundamental", "LFO");
 
-        var root = TestPatchBuilder.Root(
+        JsonObject root = TestPatchBuilder.Root(
             modules: new[] { hostMidiCc, sinkCc, sourceCc, hostMidiGate, sinkGate, sourceGate },
             cables: new[]
             {
@@ -231,15 +231,15 @@ public class PatchConverterTests
                 TestPatchBuilder.Cable(3, 4, 0, 5, 0),
                 TestPatchBuilder.Cable(4, 6, 0, 4, 0),
             });
-        var patch = TestPatchBuilder.ToPatchFile(root);
+        PatchFile patch = TestPatchBuilder.ToPatchFile(root);
 
         PatchConverter.Convert(patch, PatchOrigin.Rack);
 
-        var modules = patch.Root["modules"]!.AsArray().Cast<JsonObject>().ToList();
-        var ccIn = modules.Single(m => m["model"]!.GetValue<string>() == "MIDICCToCVInterface");
-        var ccOut = modules.Single(m => m["model"]!.GetValue<string>() == "CV-CC");
-        var gateIn = modules.Single(m => m["model"]!.GetValue<string>() == "MIDITriggerToCVInterface");
-        var gateOut = modules.Single(m => m["model"]!.GetValue<string>() == "CV-Gate");
+        List<JsonObject> modules = patch.Root["modules"]!.AsArray().Cast<JsonObject>().ToList();
+        JsonObject ccIn = modules.Single(m => m["model"]!.GetValue<string>() == "MIDICCToCVInterface");
+        JsonObject ccOut = modules.Single(m => m["model"]!.GetValue<string>() == "CV-CC");
+        JsonObject gateIn = modules.Single(m => m["model"]!.GetValue<string>() == "MIDITriggerToCVInterface");
+        JsonObject gateOut = modules.Single(m => m["model"]!.GetValue<string>() == "CV-Gate");
 
         Assert.Equal(new[] { 10, 20, 30 }, ccIn["data"]!["ccs"]!.AsArray().Select(n => n!.GetValue<int>()));
         Assert.Equal(new[] { 10, 20, 30 }, ccOut["data"]!["ccs"]!.AsArray().Select(n => n!.GetValue<int>()));
@@ -264,7 +264,7 @@ public class PatchConverterTests
         // patch is reopened. The correct behaviour is to compact only the cells actually in use (here
         // 9, 10, 11, 15, 16, 17 - six of eighteen) down into Rack's 0..15 range, in ascending order,
         // carrying their notes and cables along so nothing is lost or mismatched.
-        var hostMidiGate = TestPatchBuilder.Module(1, "Cardinal", "HostMIDIGate");
+        JsonObject hostMidiGate = TestPatchBuilder.Module(1, "Cardinal", "HostMIDIGate");
         hostMidiGate["data"] = new JsonObject
         {
             ["notes"] = new JsonArray { -1, -1, -1, 39, 40, 41, 42, 43, -1, 46, 44, 36, 48, 49, -1, 47, 45, 37 },
@@ -272,9 +272,9 @@ public class PatchConverterTests
             ["inputChannel"] = 10,
             ["outputChannel"] = 0,
         };
-        var pads = TestPatchBuilder.Module(2, "AmbientModules", "LunarPads");
+        JsonObject pads = TestPatchBuilder.Module(2, "AmbientModules", "LunarPads");
 
-        var root = TestPatchBuilder.Root(
+        JsonObject root = TestPatchBuilder.Root(
             modules: new[] { hostMidiGate, pads },
             cables: new[]
             {
@@ -285,20 +285,20 @@ public class PatchConverterTests
                 TestPatchBuilder.Cable(5, 1, 17, 2, 4), // cell 17 (note 37) -> pad 4 (beyond Rack's 16)
                 TestPatchBuilder.Cable(6, 1, 15, 2, 5), // cell 15 (note 47) -> pad 5
             });
-        var patch = TestPatchBuilder.ToPatchFile(root);
+        PatchFile patch = TestPatchBuilder.ToPatchFile(root);
 
-        var result = PatchConverter.Convert(patch, PatchOrigin.Rack);
+        ConversionResult result = PatchConverter.Convert(patch, PatchOrigin.Rack);
 
         Assert.Empty(result.Warnings); // all 6 used cells fit within Rack's 16 slots: nothing should be dropped
 
-        var modules = patch.Root["modules"]!.AsArray().Cast<JsonObject>().ToList();
-        var gateIn = modules.Single(m => m["model"]!.GetValue<string>() == "MIDITriggerToCVInterface");
+        List<JsonObject> modules = patch.Root["modules"]!.AsArray().Cast<JsonObject>().ToList();
+        JsonObject gateIn = modules.Single(m => m["model"]!.GetValue<string>() == "MIDITriggerToCVInterface");
         long gateInId = gateIn["id"]!.GetValue<long>();
 
-        var notes = gateIn["data"]!["notes"]!.AsArray().Select(n => n!.GetValue<int>()).ToList();
+        List<int> notes = gateIn["data"]!["notes"]!.AsArray().Select(n => n!.GetValue<int>()).ToList();
         Assert.Equal(16, notes.Count);
 
-        var cables = patch.Root["cables"]!.AsArray().Cast<JsonObject>()
+        Dictionary<int, int> cables = patch.Root["cables"]!.AsArray().Cast<JsonObject>()
             .Where(c => c["outputModuleId"]!.GetValue<long>() == gateInId)
             .ToDictionary(c => c["inputId"]!.GetValue<int>(), c => c["outputId"]!.GetValue<int>());
 
@@ -323,7 +323,7 @@ public class PatchConverterTests
         const long sinkId = 20;
         const long sourceId = 21;
 
-        var root = TestPatchBuilder.Root(
+        JsonObject root = TestPatchBuilder.Root(
             modules: new[]
             {
                 TestPatchBuilder.Module(midiToCvId, "Core", "MIDIToCVInterface", right: cvMidiId),
@@ -336,19 +336,19 @@ public class PatchConverterTests
                 TestPatchBuilder.Cable(1, midiToCvId, 1, sinkId, 0),   // gate out -> VCA
                 TestPatchBuilder.Cable(2, sourceId, 0, cvMidiId, 0),   // LFO -> pitch in
             });
-        var patch = TestPatchBuilder.ToPatchFile(root);
+        PatchFile patch = TestPatchBuilder.ToPatchFile(root);
 
-        var result = PatchConverter.Convert(patch, PatchOrigin.Cardinal);
+        ConversionResult result = PatchConverter.Convert(patch, PatchOrigin.Cardinal);
 
-        var modules = patch.Root["modules"]!.AsArray().Cast<JsonObject>().ToList();
-        var merged = modules.Single(m => m["model"]!.GetValue<string>() == "HostMIDI");
+        List<JsonObject> modules = patch.Root["modules"]!.AsArray().Cast<JsonObject>().ToList();
+        JsonObject merged = modules.Single(m => m["model"]!.GetValue<string>() == "HostMIDI");
         Assert.Equal("Cardinal", merged["plugin"]!.GetValue<string>());
         long mergedId = merged["id"]!.GetValue<long>();
 
         // The two original Rack modules should be gone, replaced by exactly one merged module.
         Assert.DoesNotContain(modules, m => m["model"]!.GetValue<string>() is "MIDIToCVInterface" or "CV-MIDI");
 
-        var cables = patch.Root["cables"]!.AsArray().Cast<JsonObject>().ToList();
+        List<JsonObject> cables = patch.Root["cables"]!.AsArray().Cast<JsonObject>().ToList();
         Assert.Contains(cables, c => c["outputModuleId"]!.GetValue<long>() == mergedId && c["outputId"]!.GetValue<int>() == 1);
         Assert.Contains(cables, c => c["inputModuleId"]!.GetValue<long>() == mergedId && c["inputId"]!.GetValue<int>() == 0);
         Assert.Empty(result.Warnings);
@@ -357,15 +357,15 @@ public class PatchConverterTests
     [Fact]
     public void Rack_to_Cardinal_converts_lone_unpaired_module_and_warns()
     {
-        var root = TestPatchBuilder.Root(new[]
+        JsonObject root = TestPatchBuilder.Root(new[]
         {
             TestPatchBuilder.Module(1, "Core", "MIDIToCVInterface"),
         });
-        var patch = TestPatchBuilder.ToPatchFile(root);
+        PatchFile patch = TestPatchBuilder.ToPatchFile(root);
 
-        var result = PatchConverter.Convert(patch, PatchOrigin.Cardinal);
+        ConversionResult result = PatchConverter.Convert(patch, PatchOrigin.Cardinal);
 
-        var modules = patch.Root["modules"]!.AsArray().Cast<JsonObject>().ToList();
+        List<JsonObject> modules = patch.Root["modules"]!.AsArray().Cast<JsonObject>().ToList();
         Assert.Single(modules);
         Assert.Equal("HostMIDI", modules[0]["model"]!.GetValue<string>());
         Assert.Contains(result.Warnings, w => w.Contains("no adjacent"));

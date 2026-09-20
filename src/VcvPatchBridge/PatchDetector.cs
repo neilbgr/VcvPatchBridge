@@ -1,4 +1,4 @@
-using System.Text.Json.Nodes;
+﻿using System.Text.Json.Nodes;
 
 namespace VcvPatchBridge;
 
@@ -8,15 +8,17 @@ public static class PatchDetector
 {
     public static DetectionResult Detect(PatchFile patch)
     {
-        var cardinalHits = new List<ModuleSlug>();
-        var rackHits = new List<ModuleSlug>();
+        List<ModuleSlug> cardinalHits = new List<ModuleSlug>();
+        List<ModuleSlug> rackHits = new List<ModuleSlug>();
 
-        foreach (var module in EnumerateModules(patch.Root))
+        foreach (JsonObject module in EnumerateModules(patch.Root))
         {
             string? plugin = module["plugin"]?.GetValue<string>();
             string? model = module["model"]?.GetValue<string>();
             if (plugin is null || model is null)
+            {
                 continue;
+            }
 
             // The "Cardinal" plugin slug is bundled by, and only exists inside, Cardinal itself.
             // Any module instance carrying it proves the patch was (re)saved by Cardinal.
@@ -42,12 +44,16 @@ public static class PatchDetector
     public static IEnumerable<JsonObject> EnumerateModules(JsonObject root)
     {
         if (root["modules"] is not JsonArray modules)
+        {
             yield break;
+        }
 
-        foreach (var m in modules)
+        foreach (JsonNode? m in modules)
         {
             if (m is JsonObject obj)
+            {
                 yield return obj;
+            }
         }
     }
 }

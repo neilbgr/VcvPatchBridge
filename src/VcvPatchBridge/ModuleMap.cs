@@ -1,4 +1,4 @@
-namespace VcvPatchBridge;
+﻿namespace VcvPatchBridge;
 
 public enum PatchOrigin
 {

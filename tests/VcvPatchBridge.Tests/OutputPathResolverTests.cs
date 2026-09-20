@@ -1,4 +1,4 @@
-using VcvPatchBridge;
+﻿using VcvPatchBridge;
 
 namespace VcvPatchBridge.Tests;
 

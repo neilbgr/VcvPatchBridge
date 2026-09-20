@@ -1,4 +1,4 @@
-using System.Text.Json.Nodes;
+﻿using System.Text.Json.Nodes;
 
 namespace VcvPatchBridge;
 
@@ -14,18 +14,18 @@ public sealed class ConversionResult
 /// </summary>
 public static class PatchConverter
 {
-    private static readonly Random IdRandom = new();
+    private static readonly Random idRandom = new();
 
     public static ConversionResult Convert(PatchFile patch, PatchOrigin targetOrigin)
     {
-        var result = new ConversionResult();
+        ConversionResult result = new ConversionResult();
 
-        var modulesArray = patch.Root["modules"] as JsonArray
+        JsonArray modulesArray = patch.Root["modules"] as JsonArray
             ?? throw new InvalidDataException("Patch has no \"modules\" array.");
-        var cablesArray = patch.Root["cables"] as JsonArray ?? new JsonArray();
+        JsonArray cablesArray = patch.Root["cables"] as JsonArray ?? new JsonArray();
         patch.Root["cables"] ??= cablesArray;
 
-        var modules = modulesArray.Select(m => (JsonObject)m!.AsObject()).ToList();
+        List<JsonObject> modules = modulesArray.Select(m => (JsonObject)m!.AsObject()).ToList();
         // Detach everything from the original array up front so nodes are free to move around.
         modulesArray.Clear();
 
@@ -33,8 +33,10 @@ public static class PatchConverter
             ? ConvertCardinalToRack(modules, cablesArray, result.Warnings)
             : ConvertRackToCardinal(modules, cablesArray, result.Warnings);
 
-        foreach (var m in converted)
+        foreach (JsonObject m in converted)
+        {
             modulesArray.Add(m);
+        }
 
         return result;
     }
@@ -45,10 +47,10 @@ public static class PatchConverter
     {
         CompactHostMidiGateCells(modules, cables, warnings);
 
-        var output = new List<JsonObject>();
-        var newX = ComputeSplitReflow(modules, cables);
+        List<JsonObject> output = new List<JsonObject>();
+        Dictionary<JsonObject, double> newX = ComputeSplitReflow(modules, cables);
 
-        foreach (var module in modules)
+        foreach (JsonObject module in modules)
         {
             double x = newX[module];
             double y = ReadPos(module).y;
@@ -63,16 +65,22 @@ public static class PatchConverter
                 continue;
             }
 
-            var split = ModuleMap.FindByCardinalModel(model);
+            MidiSplitMapping? split = ModuleMap.FindByCardinalModel(model);
             if (split is not null)
             {
-                var (inModule, outModule) = SplitMidiModule(module, split, x, y, cables, warnings);
+                (JsonObject? inModule, JsonObject? outModule) = SplitMidiModule(module, split, x, y, cables, warnings);
                 if (inModule is not null)
+                {
                     output.Add(inModule);
+                }
                 if (outModule is not null)
+                {
                     output.Add(outModule);
+                }
                 if (inModule is null && outModule is null)
+                {
                     warnings.Add($"Cardinal module \"{model}\" (id {module["id"]}) has no cables connected: dropped instead of converted.");
+                }
                 continue;
             }
 
@@ -111,12 +119,12 @@ public static class PatchConverter
     /// </summary>
     private static Dictionary<JsonObject, double> ComputeSplitReflow(List<JsonObject> modules, JsonArray cables)
     {
-        var newX = new Dictionary<JsonObject, double>();
+        Dictionary<JsonObject, double> newX = new Dictionary<JsonObject, double>();
 
-        foreach (var row in modules.Select(m => (Module: m, Pos: ReadPos(m))).GroupBy(t => t.Pos.y))
+        foreach (IGrouping<double, (JsonObject Module, (double x, double y) Pos)> row in modules.Select(m => (Module: m, Pos: ReadPos(m))).GroupBy(t => t.Pos.y))
         {
             double shift = 0;
-            foreach (var (module, pos) in row.OrderBy(t => t.Pos.x))
+            foreach ((JsonObject module, (double x, double y) pos) in row.OrderBy(t => t.Pos.x))
             {
                 newX[module] = pos.x + shift;
 
@@ -125,7 +133,7 @@ public static class PatchConverter
                     && ModuleMap.FindByCardinalModel(model) is { } split)
                 {
                     long oldId = module["id"]!.GetValue<long>();
-                    var (usedIn, usedOut) = DetermineSplitUsage(oldId, split, cables);
+                    (bool usedIn, bool usedOut) = DetermineSplitUsage(oldId, split, cables);
                     int newWidth = (usedIn ? split.RackInWidthHp : 0) + (usedOut ? split.RackOutWidthHp : 0);
                     shift += newWidth - split.CardinalWidthHp;
                 }
@@ -139,12 +147,16 @@ public static class PatchConverter
     private static (bool usedIn, bool usedOut) DetermineSplitUsage(long oldId, MidiSplitMapping split, JsonArray cables)
     {
         bool usedIn = false, usedOut = false;
-        foreach (var cable in cables.OfType<JsonObject>())
+        foreach (JsonObject cable in cables.OfType<JsonObject>())
         {
             if (cable["outputModuleId"]!.GetValue<long>() == oldId && cable["outputId"]!.GetValue<int>() < split.Outputs.Count)
+            {
                 usedIn = true;
+            }
             if (cable["inputModuleId"]!.GetValue<long>() == oldId && cable["inputId"]!.GetValue<int>() < split.Inputs.Count)
+            {
                 usedOut = true;
+            }
         }
         return (usedIn, usedOut);
     }
@@ -163,41 +175,55 @@ public static class PatchConverter
     {
         const int rackCapacity = 16;
 
-        foreach (var module in modules)
+        foreach (JsonObject module in modules)
         {
             if (module["plugin"]?.GetValue<string>() != ModuleMap.CardinalPlugin || module["model"]?.GetValue<string>() != "HostMIDIGate")
+            {
                 continue;
+            }
 
             long oldId = module["id"]!.GetValue<long>();
 
-            var usedCells = new SortedSet<int>();
-            foreach (var cable in cables.OfType<JsonObject>())
+            SortedSet<int> usedCells = new SortedSet<int>();
+            foreach (JsonObject cable in cables.OfType<JsonObject>())
             {
                 if (cable["outputModuleId"]!.GetValue<long>() == oldId)
+                {
                     usedCells.Add(cable["outputId"]!.GetValue<int>());
+                }
                 if (cable["inputModuleId"]!.GetValue<long>() == oldId)
+                {
                     usedCells.Add(cable["inputId"]!.GetValue<int>());
+                }
             }
 
             if (usedCells.Count == 0 || usedCells.Max() < rackCapacity)
+            {
                 continue; // already fits Rack's range as-is, nothing to compact
+            }
 
-            var orderedCells = usedCells.ToList(); // SortedSet enumerates ascending
-            var remap = new Dictionary<int, int>();
+            List<int> orderedCells = usedCells.ToList(); // SortedSet enumerates ascending
+            Dictionary<int, int> remap = new Dictionary<int, int>();
             for (int i = 0; i < orderedCells.Count && i < rackCapacity; i++)
+            {
                 remap[orderedCells[i]] = i;
+            }
 
             foreach (int overflowCell in orderedCells.Skip(rackCapacity))
+            {
                 warnings.Add($"Cardinal module \"HostMIDIGate\" (id {oldId}) has more than {rackCapacity} gate cells in use; cell #{overflowCell + 1}'s cable(s) have no free VCV Rack slot and were dropped.");
+            }
 
-            foreach (var cable in cables.OfType<JsonObject>().ToList())
+            foreach (JsonObject cable in cables.OfType<JsonObject>().ToList())
             {
                 bool removed = false;
                 if (cable["outputModuleId"]!.GetValue<long>() == oldId)
                 {
                     int cell = cable["outputId"]!.GetValue<int>();
                     if (remap.TryGetValue(cell, out int newCell))
+                    {
                         cable["outputId"] = newCell;
+                    }
                     else
                     {
                         cables.Remove(cable);
@@ -208,19 +234,27 @@ public static class PatchConverter
                 {
                     int cell = cable["inputId"]!.GetValue<int>();
                     if (remap.TryGetValue(cell, out int newCell))
+                    {
                         cable["inputId"] = newCell;
+                    }
                     else
+                    {
                         cables.Remove(cable);
+                    }
                 }
             }
 
             if (module["data"] is JsonObject data && data["notes"] is JsonArray oldNotes)
             {
-                var newNotes = new JsonArray();
+                JsonArray newNotes = new JsonArray();
                 for (int i = 0; i < rackCapacity; i++)
+                {
                     newNotes.Add(-1);
-                foreach (var (oldCell, newCell) in remap)
+                }
+                foreach ((int oldCell, int newCell) in remap)
+                {
                     newNotes[newCell] = oldCell < oldNotes.Count ? oldNotes[oldCell]!.GetValue<int>() : -1;
+                }
                 data["notes"] = newNotes;
             }
         }
@@ -230,7 +264,7 @@ public static class PatchConverter
         JsonObject cardinalModule, MidiSplitMapping split, double x, double y, JsonArray cables, List<string> warnings)
     {
         long oldId = cardinalModule["id"]!.GetValue<long>();
-        var (usedIn, usedOut) = DetermineSplitUsage(oldId, split, cables);
+        (bool usedIn, bool usedOut) = DetermineSplitUsage(oldId, split, cables);
 
         long inId = usedIn ? NewModuleId() : 0;
         long outId = usedOut ? NewModuleId() : 0;
@@ -240,7 +274,7 @@ public static class PatchConverter
             ? NewModuleObject(ModuleMap.CorePlugin, split.RackOutModel, outId, x + (usedIn ? split.RackInWidthHp : 0), y)
             : null;
 
-        foreach (var cable in cables.OfType<JsonObject>().ToList())
+        foreach (JsonObject cable in cables.OfType<JsonObject>().ToList())
         {
             long outputModuleId = cable["outputModuleId"]!.GetValue<long>();
             long inputModuleId = cable["inputModuleId"]!.GetValue<long>();
@@ -290,7 +324,7 @@ public static class PatchConverter
     /// </summary>
     private static void ApplyCardinalMidiData(JsonObject cardinalModule, MidiSplitMapping split, JsonObject? inModule, JsonObject? outModule)
     {
-        var data = cardinalModule["data"] as JsonObject;
+        JsonObject? data = cardinalModule["data"] as JsonObject;
         int inputChannel = data?["inputChannel"]?.GetValue<int>() ?? 0;
         int outputChannel = data?["outputChannel"]?.GetValue<int>() ?? 0;
         int rackInChannel = inputChannel == 0 ? -1 : inputChannel - 1;
@@ -300,50 +334,64 @@ public static class PatchConverter
             case "HostMIDI":
                 if (inModule is not null)
                 {
-                    var inData = new JsonObject { ["midi"] = new JsonObject { ["channel"] = rackInChannel } };
+                    JsonObject inData = new JsonObject { ["midi"] = new JsonObject { ["channel"] = rackInChannel } };
                     CopyBool(data, "smooth", inData);
                     CopyInt(data, "channels", inData);
                     CopyInt(data, "polyMode", inData);
                     inModule["data"] = inData;
                 }
                 if (outModule is not null)
+                {
                     outModule["data"] = new JsonObject { ["midi"] = new JsonObject { ["channel"] = outputChannel } };
+                }
                 break;
 
             case "HostMIDICC":
-                var ccs = data?["ccs"] as JsonArray;
+                JsonArray? ccs = data?["ccs"] as JsonArray;
                 if (inModule is not null)
                 {
-                    var inData = new JsonObject { ["midi"] = new JsonObject { ["channel"] = rackInChannel } };
+                    JsonObject inData = new JsonObject { ["midi"] = new JsonObject { ["channel"] = rackInChannel } };
                     CopyBool(data, "smooth", inData);
                     CopyBool(data, "mpeMode", inData);
                     CopyBool(data, "lsbMode", inData);
-                    if (ccs is not null) inData["ccs"] = CloneArray(ccs);
+                    if (ccs is not null)
+                    {
+                        inData["ccs"] = CloneArray(ccs);
+                    }
                     inModule["data"] = inData;
                 }
                 if (outModule is not null)
                 {
-                    var outData = new JsonObject { ["midi"] = new JsonObject { ["channel"] = outputChannel } };
-                    if (ccs is not null) outData["ccs"] = CloneArray(ccs);
+                    JsonObject outData = new JsonObject { ["midi"] = new JsonObject { ["channel"] = outputChannel } };
+                    if (ccs is not null)
+                    {
+                        outData["ccs"] = CloneArray(ccs);
+                    }
                     outModule["data"] = outData;
                 }
                 break;
 
             case "HostMIDIGate":
-                var notes = data?["notes"] as JsonArray;
+                JsonArray? notes = data?["notes"] as JsonArray;
                 if (inModule is not null)
                 {
-                    var inData = new JsonObject { ["midi"] = new JsonObject { ["channel"] = rackInChannel } };
+                    JsonObject inData = new JsonObject { ["midi"] = new JsonObject { ["channel"] = rackInChannel } };
                     CopyBool(data, "velocity", inData);
                     CopyBool(data, "mpeMode", inData);
-                    if (notes is not null) inData["notes"] = CloneArray(notes);
+                    if (notes is not null)
+                    {
+                        inData["notes"] = CloneArray(notes);
+                    }
                     inModule["data"] = inData;
                 }
                 if (outModule is not null)
                 {
-                    var outData = new JsonObject { ["midi"] = new JsonObject { ["channel"] = outputChannel } };
+                    JsonObject outData = new JsonObject { ["midi"] = new JsonObject { ["channel"] = outputChannel } };
                     CopyBool(data, "velocity", outData);
-                    if (notes is not null) outData["notes"] = CloneArray(notes);
+                    if (notes is not null)
+                    {
+                        outData["notes"] = CloneArray(notes);
+                    }
                     outModule["data"] = outData;
                 }
                 break;
@@ -353,13 +401,17 @@ public static class PatchConverter
     private static void CopyBool(JsonObject? source, string key, JsonObject target)
     {
         if (source?[key]?.GetValue<bool>() is bool value)
+        {
             target[key] = value;
+        }
     }
 
     private static void CopyInt(JsonObject? source, string key, JsonObject target)
     {
         if (source?[key]?.GetValue<int>() is int value)
+        {
             target[key] = value;
+        }
     }
 
     private static JsonArray CloneArray(JsonArray array) => (JsonArray)JsonNode.Parse(array.ToJsonString())!;
@@ -368,9 +420,9 @@ public static class PatchConverter
     {
         string text = module["data"]?["etext"]?.GetValue<string>() ?? "";
         long id = module["id"]!.GetValue<long>();
-        var (x, y) = ReadPos(module);
+        (double x, double y) = ReadPos(module);
 
-        var notes = NewModuleObject(ModuleMap.CorePlugin, ModuleMap.CoreNotesModel, id, x, y);
+        JsonObject notes = NewModuleObject(ModuleMap.CorePlugin, ModuleMap.CoreNotesModel, id, x, y);
         notes["data"] = new JsonObject { ["text"] = text };
         return notes;
     }
@@ -379,26 +431,28 @@ public static class PatchConverter
 
     private static List<JsonObject> ConvertRackToCardinal(List<JsonObject> modules, JsonArray cables, List<string> warnings)
     {
-        var consumed = new HashSet<JsonObject>();
-        var output = new List<JsonObject>();
+        HashSet<JsonObject> consumed = new HashSet<JsonObject>();
+        List<JsonObject> output = new List<JsonObject>();
 
-        foreach (var mapping in ModuleMap.MidiSplits)
+        foreach (MidiSplitMapping mapping in ModuleMap.MidiSplits)
         {
-            var inCandidates = modules.Where(m => !consumed.Contains(m) && IsModel(m, ModuleMap.CorePlugin, mapping.RackInModel)).ToList();
+            List<JsonObject> inCandidates = modules.Where(m => !consumed.Contains(m) && IsModel(m, ModuleMap.CorePlugin, mapping.RackInModel)).ToList();
 
-            foreach (var inModule in inCandidates)
+            foreach (JsonObject inModule in inCandidates)
             {
-                var outModule = FindAdjacent(inModule, modules, consumed, ModuleMap.CorePlugin, mapping.RackOutModel);
+                JsonObject? outModule = FindAdjacent(inModule, modules, consumed, ModuleMap.CorePlugin, mapping.RackOutModel);
 
                 long inId = inModule["id"]!.GetValue<long>();
                 long newId = NewModuleId();
-                var (x, y) = ReadPos(inModule);
-                var merged = NewModuleObject(ModuleMap.CardinalPlugin, mapping.CardinalModel, newId, x, y);
+                (double x, double y) = ReadPos(inModule);
+                JsonObject merged = NewModuleObject(ModuleMap.CardinalPlugin, mapping.CardinalModel, newId, x, y);
 
-                foreach (var cable in cables.OfType<JsonObject>())
+                foreach (JsonObject cable in cables.OfType<JsonObject>())
                 {
                     if (cable["outputModuleId"]!.GetValue<long>() == inId)
+                    {
                         cable["outputModuleId"] = newId;
+                    }
                 }
 
                 consumed.Add(inModule);
@@ -406,10 +460,12 @@ public static class PatchConverter
                 if (outModule is not null)
                 {
                     long outId = outModule["id"]!.GetValue<long>();
-                    foreach (var cable in cables.OfType<JsonObject>())
+                    foreach (JsonObject cable in cables.OfType<JsonObject>())
                     {
                         if (cable["inputModuleId"]!.GetValue<long>() == outId)
+                        {
                             cable["inputModuleId"] = newId;
+                        }
                     }
                     consumed.Add(outModule);
                 }
@@ -422,18 +478,20 @@ public static class PatchConverter
             }
 
             // Any leftover "out" modules (CV-MIDI / CV-CC / CV-Gate) without a matching "in" pair.
-            var outLeftovers = modules.Where(m => !consumed.Contains(m) && IsModel(m, ModuleMap.CorePlugin, mapping.RackOutModel)).ToList();
-            foreach (var outModule in outLeftovers)
+            List<JsonObject> outLeftovers = modules.Where(m => !consumed.Contains(m) && IsModel(m, ModuleMap.CorePlugin, mapping.RackOutModel)).ToList();
+            foreach (JsonObject outModule in outLeftovers)
             {
                 long outId = outModule["id"]!.GetValue<long>();
                 long newId = NewModuleId();
-                var (x, y) = ReadPos(outModule);
-                var merged = NewModuleObject(ModuleMap.CardinalPlugin, mapping.CardinalModel, newId, x, y);
+                (double x, double y) = ReadPos(outModule);
+                JsonObject merged = NewModuleObject(ModuleMap.CardinalPlugin, mapping.CardinalModel, newId, x, y);
 
-                foreach (var cable in cables.OfType<JsonObject>())
+                foreach (JsonObject cable in cables.OfType<JsonObject>())
                 {
                     if (cable["inputModuleId"]!.GetValue<long>() == outId)
+                    {
                         cable["inputModuleId"] = newId;
+                    }
                 }
 
                 consumed.Add(outModule);
@@ -442,10 +500,12 @@ public static class PatchConverter
             }
         }
 
-        foreach (var module in modules)
+        foreach (JsonObject module in modules)
         {
             if (consumed.Contains(module))
+            {
                 continue;
+            }
 
             string? plugin = module["plugin"]?.GetValue<string>();
             string? model = module["model"]?.GetValue<string>();
@@ -486,21 +546,27 @@ public static class PatchConverter
         long? left = module["leftModuleId"]?.GetValue<long>();
         long? right = module["rightModuleId"]?.GetValue<long>();
 
-        foreach (var candidate in allModules)
+        foreach (JsonObject candidate in allModules)
         {
             if (consumed.Contains(candidate) || !IsModel(candidate, plugin, model))
+            {
                 continue;
+            }
 
             long candidateId = candidate["id"]!.GetValue<long>();
             if (candidateId == left || candidateId == right)
+            {
                 return candidate;
+            }
 
             // Also match the reverse link, in case only the neighbour records the adjacency.
             long? candidateLeft = candidate["leftModuleId"]?.GetValue<long>();
             long? candidateRight = candidate["rightModuleId"]?.GetValue<long>();
             long moduleId = module["id"]!.GetValue<long>();
             if (candidateLeft == moduleId || candidateRight == moduleId)
+            {
                 return candidate;
+            }
         }
 
         return null;
@@ -510,9 +576,9 @@ public static class PatchConverter
     {
         string text = module["data"]?["text"]?.GetValue<string>() ?? "";
         long id = module["id"]!.GetValue<long>();
-        var (x, y) = ReadPos(module);
+        (double x, double y) = ReadPos(module);
 
-        var editor = NewModuleObject(ModuleMap.CardinalPlugin, ModuleMap.CardinalTextEditorModel, id, x, y);
+        JsonObject editor = NewModuleObject(ModuleMap.CardinalPlugin, ModuleMap.CardinalTextEditorModel, id, x, y);
         editor["data"] = new JsonObject
         {
             ["filepath"] = "",
@@ -531,7 +597,9 @@ public static class PatchConverter
     private static (double x, double y) ReadPos(JsonObject module)
     {
         if (module["pos"] is JsonArray { Count: 2 } pos)
+        {
             return (pos[0]!.GetValue<double>(), pos[1]!.GetValue<double>());
+        }
         return (0, 0);
     }
 
@@ -552,7 +620,9 @@ public static class PatchConverter
     {
         int extraIndex = index - baseCount;
         if (labels is not null && extraIndex >= 0 && extraIndex < labels.Length)
+        {
             return labels[extraIndex];
+        }
         return $"port #{index}";
     }
 
@@ -560,7 +630,7 @@ public static class PatchConverter
     {
         // Rack module ids are just unique 53-bit-ish integers; a random positive long is fine.
         Span<byte> buf = stackalloc byte[8];
-        IdRandom.NextBytes(buf);
+        idRandom.NextBytes(buf);
         long value = BitConverter.ToInt64(buf) & 0x1F_FFFF_FFFF_FFFF; // keep it positive and JS-safe-ish
         return value == 0 ? 1 : value;
     }

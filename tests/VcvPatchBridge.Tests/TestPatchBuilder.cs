@@ -1,4 +1,4 @@
-using System.Text.Json.Nodes;
+﻿using System.Text.Json.Nodes;
 using VcvPatchBridge;
 
 namespace VcvPatchBridge.Tests;
@@ -8,7 +8,7 @@ internal static class TestPatchBuilder
 {
     public static JsonObject Module(long id, string plugin, string model, long? left = null, long? right = null)
     {
-        var m = new JsonObject
+        JsonObject m = new JsonObject
         {
             ["id"] = id,
             ["plugin"] = plugin,
@@ -17,8 +17,14 @@ internal static class TestPatchBuilder
             ["params"] = new JsonArray(),
             ["pos"] = new JsonArray { 0, 0 },
         };
-        if (left is not null) m["leftModuleId"] = left;
-        if (right is not null) m["rightModuleId"] = right;
+        if (left is not null)
+        {
+            m["leftModuleId"] = left;
+        }
+        if (right is not null)
+        {
+            m["rightModuleId"] = right;
+        }
         return m;
     }
 
@@ -34,13 +40,17 @@ internal static class TestPatchBuilder
 
     public static JsonObject Root(IEnumerable<JsonObject> modules, IEnumerable<JsonObject>? cables = null)
     {
-        var modulesArray = new JsonArray();
-        foreach (var m in modules)
+        JsonArray modulesArray = new JsonArray();
+        foreach (JsonObject m in modules)
+        {
             modulesArray.Add(m);
+        }
 
-        var cablesArray = new JsonArray();
-        foreach (var c in cables ?? Enumerable.Empty<JsonObject>())
+        JsonArray cablesArray = new JsonArray();
+        foreach (JsonObject c in cables ?? Enumerable.Empty<JsonObject>())
+        {
             cablesArray.Add(c);
+        }
 
         return new JsonObject
         {
