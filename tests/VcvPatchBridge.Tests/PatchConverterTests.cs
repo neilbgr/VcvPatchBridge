@@ -370,4 +370,46 @@ public class PatchConverterTests
         Assert.Equal("HostMIDI", modules[0]["model"]!.GetValue<string>());
         Assert.Contains(result.Warnings, w => w.Contains("no adjacent"));
     }
+
+    [Fact]
+    public void Rack_to_Cardinal_remaps_cable_color_to_nearest_hue_by_default()
+    {
+        JsonObject root = TestPatchBuilder.Root(
+            modules: new[]
+            {
+                TestPatchBuilder.Module(1, "Fundamental", "VCO"),
+                TestPatchBuilder.Module(2, "Fundamental", "VCA"),
+            },
+            cables: new[]
+            {
+                TestPatchBuilder.Cable(1, 1, 0, 2, 0, color: "#00b56e"),
+            });
+        PatchFile patch = TestPatchBuilder.ToPatchFile(root);
+
+        PatchConverter.Convert(patch, PatchOrigin.Cardinal);
+
+        JsonObject cable = (JsonObject)patch.Root["cables"]![0]!;
+        Assert.Equal("#52ffbe", cable["color"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public void Cable_color_left_untouched_when_remapCableColors_is_false()
+    {
+        JsonObject root = TestPatchBuilder.Root(
+            modules: new[]
+            {
+                TestPatchBuilder.Module(1, "Fundamental", "VCO"),
+                TestPatchBuilder.Module(2, "Fundamental", "VCA"),
+            },
+            cables: new[]
+            {
+                TestPatchBuilder.Cable(1, 1, 0, 2, 0, color: "#00b56e"),
+            });
+        PatchFile patch = TestPatchBuilder.ToPatchFile(root);
+
+        PatchConverter.Convert(patch, PatchOrigin.Cardinal, remapCableColors: false);
+
+        JsonObject cable = (JsonObject)patch.Root["cables"]![0]!;
+        Assert.Equal("#00b56e", cable["color"]!.GetValue<string>());
+    }
 }

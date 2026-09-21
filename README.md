@@ -73,6 +73,12 @@ Force a direction (useful for a patch with no Cardinal- or Rack-only module, whi
 VcvPatchBridge convert plain-patch.vcv --to cardinal
 ```
 
+Cable colors are remapped by default (see below); pass `--no-cable-colors` to leave them untouched:
+
+```bash
+VcvPatchBridge convert "My Patch.vcv" --no-cable-colors
+```
+
 Re-running a conversion won't clobber a previous result — it adds `.x1`, `.x2`, etc. Pass `--force` if you actually want to overwrite:
 
 ```bash
@@ -92,6 +98,8 @@ done
 `convert` prints a `Warnings` section whenever something couldn't be carried over 1:1 (see the mapping details below for exactly which cases these are). No warnings means the conversion is complete — every module and cable maps cleanly.
 
 ## What actually happens during a conversion
+
+**Cable colors are translated to the other app's palette.** Rack's default cable palette (5 colors) and Cardinal's (16 colors) don't share any hex values, so left alone a cable's color would come out as an arbitrary, unrelated hue on the other side. Every cable's color — including a manually-picked custom color, not just the app's own default palette — is remapped to whichever color in the destination palette has the closest hue, so a red cable stays red, a green one stays green, etc. Pass `--no-cable-colors` to skip this and leave colors exactly as they are in the source file.
 
 **Straight renames** — same module, same ports, just a different plugin/name: `AudioInterface2`↔`HostAudio2`, `AudioInterface`↔`HostAudio8`, `MIDI-Map`↔`HostMIDIMap`, `Notes`↔`TextEditor`, `Blank`↔`Blank`.
 

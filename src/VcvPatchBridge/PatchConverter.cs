@@ -16,7 +16,7 @@ public static class PatchConverter
 {
     private static readonly Random idRandom = new();
 
-    public static ConversionResult Convert(PatchFile patch, PatchOrigin targetOrigin)
+    public static ConversionResult Convert(PatchFile patch, PatchOrigin targetOrigin, bool remapCableColors = true)
     {
         ConversionResult result = new ConversionResult();
 
@@ -24,6 +24,11 @@ public static class PatchConverter
             ?? throw new InvalidDataException("Patch has no \"modules\" array.");
         JsonArray cablesArray = patch.Root["cables"] as JsonArray ?? new JsonArray();
         patch.Root["cables"] ??= cablesArray;
+
+        if (remapCableColors)
+        {
+            RemapCableColors(cablesArray, targetOrigin);
+        }
 
         List<JsonObject> modules = modulesArray.Select(m => (JsonObject)m!.AsObject()).ToList();
         // Detach everything from the original array up front so nodes are free to move around.
@@ -39,6 +44,21 @@ public static class PatchConverter
         }
 
         return result;
+    }
+
+    private static void RemapCableColors(JsonArray cables, PatchOrigin targetOrigin)
+    {
+        foreach (JsonObject cable in cables.OfType<JsonObject>())
+        {
+            if (cable["color"]?.GetValue<string>() is not string color)
+            {
+                continue;
+            }
+
+            cable["color"] = targetOrigin == PatchOrigin.Rack
+                ? CableColorMap.MapToRack(color)
+                : CableColorMap.MapToCardinal(color);
+        }
     }
 
     // ---------------------------------------------------------------- Cardinal -> Rack

@@ -28,14 +28,14 @@ internal static class TestPatchBuilder
         return m;
     }
 
-    public static JsonObject Cable(long id, long outModId, int outId, long inModId, int inId) => new()
+    public static JsonObject Cable(long id, long outModId, int outId, long inModId, int inId, string color = "#ffffff") => new()
     {
         ["id"] = id,
         ["outputModuleId"] = outModId,
         ["outputId"] = outId,
         ["inputModuleId"] = inModId,
         ["inputId"] = inId,
-        ["color"] = "#ffffff",
+        ["color"] = color,
     };
 
     public static JsonObject Root(IEnumerable<JsonObject> modules, IEnumerable<JsonObject>? cables = null)

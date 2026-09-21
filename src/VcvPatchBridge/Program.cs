@@ -71,7 +71,7 @@ static int RunConvert(string[] args)
 {
     if (args.Length < 2)
     {
-        Console.Error.WriteLine("Usage: vcvpatchbridge convert <input.vcv> [output.vcv] [--to cardinal|rack] [--force]");
+        Console.Error.WriteLine("Usage: vcvpatchbridge convert <input.vcv> [output.vcv] [--to cardinal|rack] [--force] [--no-cable-colors]");
         return 1;
     }
 
@@ -86,6 +86,7 @@ static int RunConvert(string[] args)
     string? outputPath = null;
     PatchOrigin? explicitTarget = null;
     bool force = false;
+    bool noCableColors = false;
     for (int i = 2; i < args.Length; i++)
     {
         if (args[i] == "--to" && i + 1 < args.Length)
@@ -101,6 +102,10 @@ static int RunConvert(string[] args)
         else if (args[i] == "--force")
         {
             force = true;
+        }
+        else if (args[i] == "--no-cable-colors")
+        {
+            noCableColors = true;
         }
         else if (outputPath is null)
         {
@@ -140,7 +145,7 @@ static int RunConvert(string[] args)
     Console.WriteLine($"Detected origin : {Describe(detection.Origin)}");
     Console.WriteLine($"Converting to   : {Describe(target)}");
 
-    ConversionResult result = PatchConverter.Convert(patch, target);
+    ConversionResult result = PatchConverter.Convert(patch, target, remapCableColors: !noCableColors);
     patch.Save(outputPath);
 
     Console.WriteLine($"Written: {outputPath}");
@@ -171,5 +176,5 @@ static void PrintUsage() => Console.WriteLine("""
 
     Usage:
       vcvpatchbridge detect <patch.vcv>
-      vcvpatchbridge convert <input.vcv> [output.vcv] [--to cardinal|rack] [--force]
+      vcvpatchbridge convert <input.vcv> [output.vcv] [--to cardinal|rack] [--force] [--no-cable-colors]
     """);
