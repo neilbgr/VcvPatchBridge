@@ -16,6 +16,17 @@ public static class OutputPathResolver
             _ => throw new ArgumentOutOfRangeException(nameof(target), target, "Target must be Cardinal or Rack."),
         };
 
+        // Replace an existing ".cardinal"/".rack" origin suffix instead of stacking another one
+        // (e.g. "Patch.cardinal.vcv" -> "Patch.rack.vcv", not "Patch.cardinal.rack.vcv").
+        foreach (string originSuffix in new[] { ".cardinal", ".rack" })
+        {
+            if (baseName.EndsWith(originSuffix, StringComparison.OrdinalIgnoreCase))
+            {
+                baseName = baseName[..^originSuffix.Length];
+                break;
+            }
+        }
+
         string candidate = Path.Combine(dir, $"{baseName}.{slug}{ext}");
         if (force || !File.Exists(candidate))
         {
